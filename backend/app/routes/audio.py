@@ -35,18 +35,13 @@ def get_summarizer_service(api_key: str):
     return SummarizerService(api_key)
 
 def get_user_openai_key(user: User) -> str:
-    """Get OpenAI API key for user (personal key or fallback to system key)"""
-    if user.openai_api_key:
-        return user.openai_api_key
-    
-    # Fallback to system key if user hasn't set their own
-    system_key = os.getenv("OPENAI_API_KEY")
-    if not system_key:
+    """Get OpenAI API key for user - requires personal key configuration"""
+    if not user.openai_api_key:
         raise HTTPException(
             status_code=400, 
-            detail="Please configure your personal OpenAI API key in your profile, or contact administrator"
+            detail="Por favor, configure sua chave pessoal da OpenAI no seu perfil antes de fazer transcrições. Acesse 'Configurações' no menu."
         )
-    return system_key
+    return user.openai_api_key
 
 # Supported audio formats
 SUPPORTED_FORMATS = {'.mp3', '.wav', '.m4a', '.ogg', '.webm', '.mp4', '.mpeg', '.mpga'}
