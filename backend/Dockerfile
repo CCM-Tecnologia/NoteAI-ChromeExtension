@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     libpq-dev \
     pkg-config \
+    ffmpeg \
     libavformat-dev \
     libavcodec-dev \
     libavdevice-dev \
