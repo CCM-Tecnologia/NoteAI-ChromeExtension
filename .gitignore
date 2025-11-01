@@ -87,6 +87,7 @@ dashboard/.env
 # Nuxt.js build / generate output
 .nuxt
 dist
+!dist/README.md
 
 # Gatsby files
 .cache/

@@ -47,6 +47,8 @@ import {
   Add,
   LocalOffer,
   CloudUpload,
+  Settings,
+  AccountCircle,
 } from '@mui/icons-material'
 import axios from 'axios'
 import { jsPDF } from 'jspdf'
@@ -101,12 +103,19 @@ function App() {
   const [uploadFile, setUploadFile] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  
+  // Settings dialog state
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
+  const [userProfile, setUserProfile] = useState(null)
+  const [openaiApiKey, setOpenaiApiKey] = useState('')
+  const [savingSettings, setSavingSettings] = useState(false)
 
   useEffect(() => {
     const token = localStorage.getItem('authToken')
     if (token) {
       setIsAuthenticated(true)
       fetchTranscriptions()
+      fetchUserProfile() // Load user profile on mount
     } else {
       setLoading(false)
     }
@@ -126,6 +135,7 @@ function App() {
       localStorage.setItem('authToken', response.data.access_token)
       setIsAuthenticated(true)
       fetchTranscriptions()
+      fetchUserProfile() // Load user profile after login
     } catch (err) {
       setLoginError(err.response?.data?.detail || 'Erro ao fazer login')
     } finally {
@@ -137,6 +147,49 @@ function App() {
     localStorage.removeItem('authToken')
     setIsAuthenticated(false)
     setTranscriptions([])
+  }
+
+  const fetchUserProfile = async () => {
+    try {
+      const response = await api.get('/auth/me')
+      setUserProfile(response.data)
+      return response.data
+    } catch (err) {
+      console.error('Error fetching user profile:', err)
+      setSnackbarMessage('Erro ao carregar perfil do usuário')
+      setSnackbarOpen(true)
+    }
+  }
+
+  const handleOpenSettings = async () => {
+    setSettingsDialogOpen(true)
+    await fetchUserProfile()
+  }
+
+  const handleSaveSettings = async () => {
+    if (!openaiApiKey.trim()) {
+      setSnackbarMessage('Por favor, insira uma chave de API válida')
+      setSnackbarOpen(true)
+      return
+    }
+
+    setSavingSettings(true)
+    try {
+      await api.patch('/auth/me', {
+        openai_api_key: openaiApiKey
+      })
+      
+      setSnackbarMessage('Chave OpenAI salva com sucesso!')
+      setSnackbarOpen(true)
+      setOpenaiApiKey('') // Clear for security
+      setSettingsDialogOpen(false)
+      await fetchUserProfile() // Refresh profile
+    } catch (err) {
+      setSnackbarMessage(err.response?.data?.detail || 'Erro ao salvar configurações')
+      setSnackbarOpen(true)
+    } finally {
+      setSavingSettings(false)
+    }
   }
 
   const fetchTranscriptions = async () => {
@@ -700,6 +753,19 @@ ${transcription.language ? `- **Idioma:** ${transcription.language}` : ''}
             }}
           >
             Upload Áudio
+          </Button>
+          <Button
+            startIcon={<Settings />}
+            onClick={handleOpenSettings}
+            sx={{
+              mr: 2,
+              color: userProfile?.has_openai_key ? '#4caf50' : '#ff9800',
+              textTransform: 'none',
+              fontWeight: 500,
+              '&:hover': { bgcolor: '#f5f5f5' }
+            }}
+          >
+            {userProfile?.has_openai_key ? 'Configurações' : 'Configurar API Key'}
           </Button>
           <Button
             onClick={handleLogout}
@@ -1468,6 +1534,127 @@ ${transcription.language ? `- **Idioma:** ${transcription.language}` : ''}
             }}
           >
             {uploading ? 'Enviando...' : 'Transcrever'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Settings Dialog */}
+      <Dialog
+        open={settingsDialogOpen}
+        onClose={() => !savingSettings && setSettingsDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '12px',
+            border: '1px solid #e5e5e5'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          borderBottom: '1px solid #e5e5e5',
+          py: 2,
+          px: 3,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <AccountCircle />
+            <Typography variant="h6" sx={{ fontWeight: 600, color: '#000' }}>
+              Configurações da Conta
+            </Typography>
+          </Box>
+          <IconButton 
+            onClick={() => !savingSettings && setSettingsDialogOpen(false)}
+            disabled={savingSettings}
+            size="small"
+          >
+            <Close />
+          </IconButton>
+        </DialogTitle>
+        
+        <DialogContent sx={{ py: 3 }}>
+          {userProfile && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="body2" sx={{ color: '#666', mb: 1 }}>
+                <strong>Email:</strong> {userProfile.email}
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
+                <strong>Nome:</strong> {userProfile.name}
+              </Typography>
+              
+              {userProfile.has_openai_key && (
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  ✓ Chave OpenAI configurada
+                </Alert>
+              )}
+              {!userProfile.has_openai_key && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  ⚠️ Configure sua chave OpenAI para poder transcrever áudios
+                </Alert>
+              )}
+            </Box>
+          )}
+          
+          <Divider sx={{ my: 2 }} />
+          
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: '#000' }}>
+            Chave de API OpenAI
+          </Typography>
+          
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              Insira sua chave pessoal da OpenAI. Você será cobrado diretamente pela OpenAI 
+              pelo uso da API de transcrição (~$0.006 por minuto de áudio).
+            </Typography>
+          </Alert>
+          
+          <Typography variant="body2" sx={{ color: '#666', mb: 1 }}>
+            Obtenha sua chave em:{' '}
+            <a 
+              href="https://platform.openai.com/api-keys" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{ color: '#1976d2' }}
+            >
+              platform.openai.com/api-keys
+            </a>
+          </Typography>
+          
+          <TextField
+            fullWidth
+            type="password"
+            label="OpenAI API Key"
+            placeholder="sk-..."
+            value={openaiApiKey}
+            onChange={(e) => setOpenaiApiKey(e.target.value)}
+            disabled={savingSettings}
+            sx={{ mt: 2 }}
+            helperText="Sua chave é armazenada com segurança e nunca compartilhada"
+          />
+        </DialogContent>
+        
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button
+            onClick={() => setSettingsDialogOpen(false)}
+            disabled={savingSettings}
+            sx={{ textTransform: 'none', color: '#666' }}
+          >
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleSaveSettings}
+            disabled={!openaiApiKey.trim() || savingSettings}
+            variant="contained"
+            sx={{
+              bgcolor: '#000',
+              textTransform: 'none',
+              '&:hover': { bgcolor: '#333' },
+              '&:disabled': { bgcolor: '#e5e5e5' }
+            }}
+          >
+            {savingSettings ? 'Salvando...' : 'Salvar Chave'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -1,0 +1,137 @@
+# Deployment para servir a extensão via HTTP (opcional)
+# Útil para hospedar o ZIP da extensão internamente
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: extension-config
+  namespace: meeting-ai
+data:
+  config.js: |
+    const CONFIG = {
+        API_BASE_URL: 'https://api.meetingai.ccm.com.br/api'
+    };
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: extension-nginx-config
+  namespace: meeting-ai
+data:
+  nginx.conf: |
+    server {
+        listen 80;
+        server_name _;
+        
+        location / {
+            root /usr/share/nginx/html;
+            autoindex on;
+            autoindex_exact_size off;
+            autoindex_localtime on;
+        }
+        
+        location /download {
+            alias /usr/share/nginx/html;
+            add_header Content-Disposition 'attachment; filename="meeting-ai-extension.zip"';
+        }
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: extension-server
+  namespace: meeting-ai
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: extension-server
+  template:
+    metadata:
+      labels:
+        app: extension-server
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: extension-files
+          mountPath: /usr/share/nginx/html
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+      volumes:
+      - name: extension-files
+        # Monte um PVC ou ConfigMap com o ZIP da extensão
+        persistentVolumeClaim:
+          claimName: extension-files-pvc
+      - name: nginx-config
+        configMap:
+          name: extension-nginx-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: extension-server
+  namespace: meeting-ai
+spec:
+  selector:
+    app: extension-server
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: extension-server
+  namespace: meeting-ai
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - extensions.meetingai.ccm.com.br
+    secretName: extension-server-tls
+  rules:
+  - host: extensions.meetingai.ccm.com.br
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: extension-server
+            port:
+              number: 80
+
+---
+# PVC para armazenar o ZIP da extensão
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: extension-files-pvc
+  namespace: meeting-ai
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Mi
+  storageClassName: standard  # ou sua storage class

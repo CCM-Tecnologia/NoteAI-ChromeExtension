@@ -17,6 +17,7 @@ class UserUpdate(BaseModel):
 class UserInDB(UserBase):
     id: int
     is_active: bool
+    has_openai_key: bool = False  # Indica se o usuário tem chave configurada (sem expor a chave)
     created_at: datetime
     updated_at: Optional[datetime] = None
     

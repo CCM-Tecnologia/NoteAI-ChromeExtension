@@ -64,7 +64,17 @@ async def read_users_me(
     current_user: models.User = Depends(get_current_active_user)
 ):
     """Get current user information"""
-    return current_user
+    # Add has_openai_key field
+    user_dict = {
+        "id": current_user.id,
+        "email": current_user.email,
+        "name": current_user.name,
+        "is_active": current_user.is_active,
+        "has_openai_key": bool(current_user.openai_api_key),
+        "created_at": current_user.created_at,
+        "updated_at": current_user.updated_at
+    }
+    return user_dict
 
 @router.patch("/me", response_model=schemas.User)
 async def update_user_me(
@@ -79,7 +89,18 @@ async def update_user_me(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
-    return updated_user
+    
+    # Return user info with has_openai_key field
+    user_dict = {
+        "id": updated_user.id,
+        "email": updated_user.email,
+        "name": updated_user.name,
+        "is_active": updated_user.is_active,
+        "has_openai_key": bool(updated_user.openai_api_key),
+        "created_at": updated_user.created_at,
+        "updated_at": updated_user.updated_at
+    }
+    return user_dict
 
 @router.get("/users", response_model=List[schemas.User])
 async def list_users(
